@@ -75,6 +75,22 @@ pyassist/
 
 ---
 
+## ▶️ Run on Replit
+
+Install the dependencies once, then start the Node gateway and FastAPI service together:
+
+```bash
+npm install
+python3 -m pip install -r requirements.txt
+npm run dev
+```
+
+The gateway listens on port 5000 by default and proxies same-origin requests to FastAPI on port 8888. Set `GEMINI_API_KEY` in Replit Secrets to enable real Gemini answers for all five modes. Without that secret, Ask mode uses the local knowledge base and the other modes clearly report that Gemini is unavailable.
+
+PyAssist uses SQLite at `./pyassist.db` by default and does not consume Replit's injected PostgreSQL `DATABASE_URL`. To intentionally select a different database, set `PYASSIST_DATABASE_URL`.
+
+---
+
 ## 🚀 Local Installation & Setup
 
 ### Prerequisites

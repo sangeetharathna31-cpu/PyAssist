@@ -89,6 +89,7 @@ class MessageResponse(BaseModel):
     is_supported: bool = True
     created_at: datetime
     mode: Optional[str] = "ask"
+    model_used: Optional[str] = None
 
 
 class ChatAskResponse(BaseModel):

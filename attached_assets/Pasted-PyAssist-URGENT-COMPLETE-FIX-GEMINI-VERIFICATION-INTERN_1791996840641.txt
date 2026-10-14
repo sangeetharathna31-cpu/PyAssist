@@ -1,0 +1,123 @@
+PyAssist — URGENT COMPLETE FIX, GEMINI VERIFICATION & INTERNSHIP SUBMISSION
+
+My existing PyAssist project must be fixed and verified TODAY. The registration page displays "Failed to fetch", I cannot reliably register or log in, and some error messages display "[object Object]" instead of a readable explanation.
+
+The project already contains FastAPI, a database, authentication, chat history, a Python knowledge base, Gemini integration, and five AI modes.
+
+Inspect the actual code first. Make the smallest safe changes, preserve the existing architecture, and do not rebuild the application or add unnecessary features.
+
+PRIORITY 1 — FIX REGISTRATION, LOGIN AND "FAILED TO FETCH"
+
+1. Inspect the frontend JavaScript, registration/login forms, FastAPI routes, API base URL, server configuration, database configuration and available logs.
+2. Trace the complete registration request from the frontend to the backend.
+3. Identify the actual reason for the network failure. Check incorrect URLs or ports, unavailable backend services, wrong endpoint paths, request payload mismatches, proxy configuration, CORS and backend startup errors.
+4. Fix the confirmed root cause instead of guessing.
+5. Ensure username, email and password fields match the backend schema. Username must follow the actual validation rules and must not be confused with the separate email field.
+6. Show understandable messages for duplicate usernames, duplicate emails, invalid inputs and network failures.
+7. Verify registration with a new valid account, then verify login and access to the dashboard.
+8. Preserve existing accounts and data. Never bypass authentication or disable security to make registration work.
+
+PRIORITY 2 — FIX "[object Object]" ERROR MESSAGES
+
+Inspect every relevant frontend error-handling path, especially "app.js", registration/login handlers, chat requests and API response handling.
+
+1. Find code that directly converts an error object or response object into a string, causing messages such as "[object Object]".
+2. Implement a reusable, safe error-formatting function that extracts meaningful messages from:
+   - "Error.message"
+   - FastAPI responses such as "{ "detail": "Invalid credentials" }"
+   - Validation responses such as "{ "detail": [{ "loc": ["body", "username"], "msg": "Field required" }] }"
+   - Network failures, HTTP error responses, invalid JSON and unexpected response formats.
+3. Handle FastAPI validation errors by extracting and displaying useful field-specific messages.
+4. For non-JSON responses, use a safe fallback rather than crashing.
+5. Distinguish network failures from HTTP 400, 401, 403, 404, 409, 422, 429 and 500 errors where applicable.
+6. Never assume every response is JSON or every error contains a "detail" property.
+7. Do not display raw JavaScript objects, HTML error pages, stack traces, API keys, tokens or sensitive server information to users.
+8. Render messages safely using "textContent" or the existing safe rendering mechanism, not unsafe HTML insertion.
+9. Preserve the current UI design. Display short, actionable messages near the relevant form or chat input.
+10. Add tests for string errors, object errors, FastAPI validation errors, malformed responses, empty responses and network failures.
+
+Examples of expected messages:
+
+- Network failure: "Unable to connect to the server. Check that the application is running and try again."
+- Invalid username: "Please enter a valid username."
+- Duplicate account: "This username or email is already registered. Try logging in."
+- Invalid credentials: "Invalid username/email or password."
+- Server error: "Something went wrong. Please try again."
+- Validation error: Show the relevant field and validation message.
+
+Do not hide real errors during development. Inspect backend logs for the root cause while keeping sensitive details out of the user interface.
+
+PRIORITY 3 — VERIFY REAL GEMINI INTEGRATION
+
+Inspect "gemini_service.py", configuration, schemas and chat routes.
+
+1. Verify that the configured model ID is currently available and the official Gemini SDK is used correctly.
+2. Load the API key only from server-side environment configuration or supported secrets.
+3. Never expose credentials in frontend JavaScript, browser responses or logs.
+4. Trace the selected mode from the UI through the backend to Gemini and back.
+5. Verify that real Gemini responses are distinguished from deterministic knowledge-base fallback responses.
+6. Handle missing credentials, invalid API keys, unavailable models, timeouts, network failures and quota errors gracefully.
+7. If valid credentials are available, perform one minimal live API verification. If they are unavailable, report that live verification could not be completed.
+8. Never fabricate a successful API response or label a fallback response as Gemini-generated.
+
+PRIORITY 4 — VERIFY ALL FIVE AI MODES
+
+Test these prompts through the actual application after login.
+
+ASK:
+"What is the difference between == and is in Python?"
+
+GENERATE:
+"Write a Python program to check whether a number is prime. Include sample input and output."
+
+DEBUG:
+"Why does numbers = [1, 2]; print(numbers[2]) raise an error? Provide corrected code."
+
+EXPLAIN:
+"Explain this code step by step: for i in range(3): print(i)"
+
+REVIEW:
+"Review this code for security and correctness: password = input(); query = 'SELECT * FROM users WHERE name=' + password"
+
+Verify that each mode reaches the correct backend handler, uses the intended instructions and returns a relevant response. Never execute untrusted user code directly on the main server.
+
+PRIORITY 5 — SECURITY AND REGRESSION TESTS
+
+1. Run:
+   "python3 -m pytest tests -q"
+2. Fix regressions and rerun relevant tests.
+3. Test registration, duplicate accounts, login, logout, protected routes, chat history, user isolation and all five AI modes.
+4. Test the error formatter with realistic backend and network errors.
+5. Preserve password hashing, CSRF protections where applicable, secure cookies, rate limiting and existing database constraints.
+6. Do not weaken security or log sensitive data.
+7. Distinguish mocked tests from actual live API verification.
+
+PRIORITY 6 — FINAL SUBMISSION CHECK
+
+Verify in the actual preview:
+
+- Registration works with a valid new account.
+- Login succeeds with the registered credentials.
+- The dashboard opens successfully.
+- Errors display readable messages rather than "[object Object]".
+- All five mode selectors work.
+- At least one real Gemini response is verified if valid credentials are available.
+- Chat history and logout work.
+- The documented startup command and required environment variables are correct.
+
+FINAL REPORT
+
+Report:
+
+1. Actual root cause of "Failed to fetch".
+2. Cause of "[object Object]" and how it was fixed.
+3. Files changed.
+4. Registration/login verification results.
+5. Gemini connection status: VERIFIED or NOT VERIFIED.
+6. Configured model availability and results for all five modes.
+7. Actual automated test results and warnings.
+8. Exact startup command.
+9. Any remaining blocker before submission.
+
+IMPORTANT:
+Fix registration and login first, then error formatting, then Gemini verification. Preserve the existing project and working features. Make minimal targeted changes. Do not invent test results, logs or successful verifications. Prioritize a secure, working submission today.

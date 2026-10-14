@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 # Set test environment
 os.environ["APP_ENV"] = "test"
-os.environ["DATABASE_URL"] = "sqlite:///./test_pyassist.db"
+os.environ["PYASSIST_DATABASE_URL"] = "sqlite:///./test_pyassist.db"
 
 from pyassist.app.main import app
 from pyassist.app.database import Base, get_db

@@ -1,9 +1,10 @@
+import "dotenv/config";
 import { spawn, ChildProcess } from "child_process";
 import express from "express";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import http from "http";
 
-const PORT = parseInt(process.env.PORT || "3000", 10);
+const PORT = parseInt(process.env.PORT || "5000", 10);
 const PYTHON_PORT = 8888;
 const PYTHON_HOST = "127.0.0.1";
 

@@ -1,5 +1,5 @@
 import os
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from typing import Optional, List
 
@@ -7,7 +7,12 @@ class Settings(BaseModel):
     APP_NAME: str = "PyAssist"
     APP_ENV: str = os.getenv("APP_ENV", "development")
     SECRET_KEY: str = os.getenv("SECRET_KEY", "pyassist-insecure-dev-secret-key-change-in-prod-32bytes")
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./pyassist.db")
+    # Replit supplies DATABASE_URL for its managed PostgreSQL service. This
+    # project is SQLite-backed, so use an app-specific override and preserve
+    # the existing SQLite database unless the app owner explicitly changes it.
+    DATABASE_URL: str = Field(
+        default_factory=lambda: os.getenv("PYASSIST_DATABASE_URL", "sqlite:///./pyassist.db")
+    )
     SESSION_COOKIE_NAME: str = "pyassist_session"
     CSRF_COOKIE_NAME: str = "pyassist_csrf"
     SESSION_MAX_AGE_SECONDS: int = 60 * 60 * 24 * 7  # 7 days

@@ -37,6 +37,40 @@ def test_duplicate_username_and_email(client: TestClient, registered_user):
     assert res2.status_code == 409
     assert "already exists" in res2.json()["detail"].lower()
 
+    # Account identifiers are case-insensitive for duplicate detection.
+    case_variant = {
+        "username": registered_user["credentials"]["username"].upper(),
+        "email": "different2@example.com",
+        "password": "Password123"
+    }
+    res3 = client.post("/api/auth/register", json=case_variant)
+    assert res3.status_code == 409
+
+
+def test_register_login_and_open_dashboard(client: TestClient):
+    credentials = {
+        "username": "submission_user",
+        "email": "submission@example.com",
+        "password": "SecurePassword123"
+    }
+    registration = client.post("/api/auth/register", json=credentials)
+    assert registration.status_code == 201
+
+    login = client.post("/api/auth/login", json={
+        "username_or_email": credentials["email"],
+        "password": credentials["password"]
+    })
+    assert login.status_code == 200
+    cookies = login.cookies
+
+    profile = client.get("/api/auth/me", cookies=cookies)
+    assert profile.status_code == 200
+    assert profile.json()["username"] == credentials["username"]
+
+    dashboard = client.get("/", cookies=cookies)
+    assert dashboard.status_code == 200
+    assert "PyAssist" in dashboard.text
+
 def test_invalid_registration_data(client: TestClient):
     # Short password
     short_pw = {

@@ -120,19 +120,30 @@ async def ask_question(
                 related_topics = kb_result["related_topics"]
                 confidence_score = kb_result["confidence_score"]
             else:
-                bot_content = f"⚠️ **AI Service Notice**: {logger_msg}\n\nPlease try again in a few moments."
+                bot_content = f"Gemini is unavailable: {logger_msg}"
+                topic_id = None
                 is_supported = False
                 confidence_score = 0.0
     else:
-        # No Gemini key provided, use deterministic knowledge base fallback
-        kb_result = query_knowledge_base(ask_req.question)
-        bot_content = kb_result["content"]
-        code_example = kb_result["code_example"]
-        expected_output = kb_result["expected_output"]
-        topic_id = kb_result["topic_id"]
-        is_supported = kb_result["is_supported"]
-        related_topics = kb_result["related_topics"]
-        confidence_score = kb_result["confidence_score"]
+        if mode == "ask":
+            # General Q&A remains available from the deterministic local knowledge base.
+            kb_result = query_knowledge_base(ask_req.question)
+            bot_content = kb_result["content"]
+            code_example = kb_result["code_example"]
+            expected_output = kb_result["expected_output"]
+            topic_id = kb_result["topic_id"]
+            is_supported = kb_result["is_supported"]
+            related_topics = kb_result["related_topics"]
+            confidence_score = kb_result["confidence_score"]
+        else:
+            # Do not claim a KB response is code generation/debugging/review.
+            bot_content = (
+                "This mode requires Gemini, but no server-side Gemini API key is configured. "
+                "Ask mode can still use the local Python knowledge base."
+            )
+            topic_id = None
+            is_supported = False
+            confidence_score = 0.0
 
     # 3. Save assistant response message
     bot_msg = Message(
@@ -156,6 +167,7 @@ async def ask_question(
 
     bot_resp = MessageResponse.model_validate(bot_msg)
     bot_resp.mode = mode
+    bot_resp.model_used = model_used
 
     return ChatAskResponse(
         conversation_id=conversation.id,

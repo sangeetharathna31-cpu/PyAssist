@@ -89,8 +89,8 @@ def test_chat_empty_and_oversized_validation(client: TestClient, registered_user
     )
     assert res_empty.status_code == 422
 
-    # Oversized question (> 1000 characters)
-    oversized = "a" * 1005
+    # Oversized question (> the backend's 4000-character limit)
+    oversized = "a" * 4005
     res_over = client.post(
         "/api/chat/ask",
         cookies=cookies,

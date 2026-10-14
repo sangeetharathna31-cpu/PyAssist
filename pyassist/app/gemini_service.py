@@ -99,8 +99,16 @@ def _call_gemini_sync(prompt: str, mode: str, model_name: str) -> Tuple[str, str
                 logger.info(f"Retrying model {model_name} after 503 spike (attempt {attempt+1})...")
                 time.sleep(1.2)
                 continue
-            logger.warning(f"Gemini call failed with model '{model_name}': {exc}")
+            # Provider exception text may contain request details, so never log it.
+            logger.warning("Gemini call failed for model %s (%s).", model_name, type(exc).__name__)
             raise exc
+
+def _api_error_code(error: APIError) -> Optional[int]:
+    """Read the HTTP status without logging or returning the provider's raw error."""
+    try:
+        return int(getattr(error, "code", None))
+    except (TypeError, ValueError):
+        return None
 
 async def generate_gemini_response(
     question: str,
@@ -112,7 +120,7 @@ async def generate_gemini_response(
         return {
             "success": False,
             "error_type": "missing_api_key",
-            "message": "Gemini API key is not configured. Falling back to deterministic knowledge base."
+            "message": "Gemini is not configured. Ask mode can use the local Python knowledge base."
         }
 
     models_to_try = []
@@ -124,7 +132,7 @@ async def generate_gemini_response(
         if fb not in models_to_try:
             models_to_try.append(fb)
 
-    last_error = None
+    last_error_type = "unavailable"
     for model_name in models_to_try:
         try:
             loop = asyncio.get_event_loop()
@@ -145,30 +153,58 @@ async def generate_gemini_response(
             }
 
         except asyncio.TimeoutError:
-            logger.error(f"Timeout calling Gemini with model {model_name} after {settings.GEMINI_TIMEOUT_SECONDS}s")
-            last_error = f"Request timed out with model {model_name}."
+            logger.warning("Gemini request timed out for model %s.", model_name)
+            last_error_type = "timeout"
             continue
         except APIError as api_err:
-            logger.error(f"Gemini API Error with {model_name}: {api_err}")
-            last_error = str(api_err)
-            # Try next model if 503 unavailable
-            if "503" in str(api_err) or "UNAVAILABLE" in str(api_err):
-                continue
-            # Quota exceeded or permission
-            if "429" in str(api_err) or "RESOURCE_EXHAUSTED" in str(api_err):
+            status_code = _api_error_code(api_err)
+            status_text = str(getattr(api_err, "status", "")).upper()
+            message_text = str(getattr(api_err, "message", "")).upper()
+            error_markers = f"{status_text} {message_text}"
+            logger.warning(
+                "Gemini API request failed for model %s (HTTP %s).",
+                model_name,
+                status_code or "unknown"
+            )
+
+            if status_code in (401, 403) or "API_KEY_INVALID" in error_markers:
+                return {
+                    "success": False,
+                    "error_type": "invalid_api_key",
+                    "message": "Gemini rejected the configured credentials. Check the server-side API key."
+                }
+            if status_code == 429 or "RESOURCE_EXHAUSTED" in error_markers:
                 return {
                     "success": False,
                     "error_type": "quota_exceeded",
-                    "message": "Gemini API rate limit or quota exceeded. Please wait a moment before trying again."
+                    "message": "Gemini quota is unavailable right now. Please try again later."
                 }
+            if status_code == 404 or "NOT_FOUND" in error_markers:
+                last_error_type = "model_unavailable"
+                continue
+            if status_code == 503 or "UNAVAILABLE" in error_markers:
+                last_error_type = "unavailable"
+                continue
+            last_error_type = "unavailable"
             continue
         except Exception as exc:
-            logger.error(f"Unexpected error calling Gemini with {model_name}: {exc}")
-            last_error = str(exc)
+            logger.warning(
+                "Gemini request failed for model %s (%s).",
+                model_name,
+                type(exc).__name__
+            )
+            last_error_type = "unavailable"
             continue
+
+    if last_error_type == "model_unavailable":
+        message = "None of the configured Gemini models is available to this project."
+    elif last_error_type == "timeout":
+        message = "Gemini did not respond in time. Please try again."
+    else:
+        message = "Gemini is temporarily unavailable. Please try again later."
 
     return {
         "success": False,
-        "error_type": "all_models_failed",
-        "message": f"Unable to reach Gemini models. Detail: {last_error}"
+        "error_type": last_error_type,
+        "message": message
     }

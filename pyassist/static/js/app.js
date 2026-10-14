@@ -55,13 +55,10 @@ async function getCsrfToken() {
   let token = getCookie("pyassist_csrf");
   if (!token) {
     try {
-      const res = await fetch("/api/auth/csrf");
-      if (res.ok) {
-        const data = await res.json();
-        token = data.csrf_token;
-      }
+      const data = await PyAssistErrors.fetchJson("/api/auth/csrf");
+      token = data && data.csrf_token;
     } catch (e) {
-      console.warn("CSRF fetch failed:", e);
+      console.warn("CSRF token request failed.");
     }
   }
   return token || "";
@@ -166,16 +163,11 @@ function formatInlineMarkdown(text) {
 // Check Authentication
 async function checkAuth() {
   try {
-    const res = await fetch("/api/auth/me");
-    if (!res.ok) {
-      window.location.href = "/login.html";
-      return false;
-    }
-    currentUser = await res.json();
+    currentUser = await PyAssistErrors.fetchJson("/api/auth/me");
     setupUserProfile();
     return true;
   } catch (err) {
-    console.error("Auth check failed:", err);
+    console.warn("Authentication check failed.");
     window.location.href = "/login.html";
     return false;
   }
@@ -195,12 +187,10 @@ function setupUserProfile() {
 // Conversation Management
 async function loadConversations() {
   try {
-    const res = await fetch("/api/history");
-    if (!res.ok) return;
-    conversations = await res.json();
+    conversations = await PyAssistErrors.fetchJson("/api/history");
     renderConversationList();
   } catch (err) {
-    console.error("Failed to load history:", err);
+    console.warn("Could not load conversation history.");
   }
 }
 
@@ -265,12 +255,7 @@ function renderConversationList(filterQuery = "") {
 // Load detail for a selected conversation
 async function loadConversationDetail(conversationId) {
   try {
-    const res = await fetch(`/api/history/${conversationId}`);
-    if (!res.ok) {
-      console.error("Conversation not found");
-      return;
-    }
-    const data = await res.json();
+    const data = await PyAssistErrors.fetchJson(`/api/history/${conversationId}`);
     currentConversationId = data.id;
 
     document.getElementById("current-chat-title").textContent = data.title;
@@ -287,7 +272,7 @@ async function loadConversationDetail(conversationId) {
 
     scrollToBottom();
   } catch (err) {
-    console.error("Failed to load conversation details:", err);
+    console.warn("Could not load conversation details.");
   }
 }
 
@@ -321,33 +306,52 @@ function renderMessage(msg) {
 
   if (msg.role === "user") {
     bubble.textContent = msg.content;
-  } else {
-    // Bot message
-    if (msg.topic_id || !msg.is_supported) {
-      const meta = document.createElement("div");
-      meta.className = "message-meta";
-
-      if (msg.topic_id) {
-        const badge = document.createElement("span");
-        badge.className = "topic-badge";
-        badge.textContent = "Verified Knowledge Base";
-        meta.appendChild(badge);
-      } else if (!msg.is_supported) {
-        const badge = document.createElement("span");
-        badge.className = "topic-badge";
-        badge.style.borderColor = "var(--status-warning)";
-        badge.style.color = "var(--status-warning)";
-        badge.textContent = "Topic Not Found";
-        meta.appendChild(badge);
-      }
-
-      const time = document.createElement("span");
-      time.className = "message-time";
-      time.textContent = formatDate(msg.created_at);
-      meta.appendChild(time);
-
-      bubble.appendChild(meta);
+    const messageMode = msg.mode ||
+      (msg.topic_id && msg.topic_id.startsWith("mode:") ? msg.topic_id.slice(5) : "ask");
+    const modeConfig = MODE_CONFIG[messageMode];
+    if (modeConfig && messageMode !== "ask") {
+      const badge = document.createElement("div");
+      badge.className = `mode-badge ${messageMode}`;
+      badge.textContent = `${modeConfig.icon} ${modeConfig.name}`;
+      bubble.prepend(badge);
     }
+  } else {
+    const meta = document.createElement("div");
+    meta.className = "message-meta";
+
+    const modeKey = msg.mode ||
+      (msg.topic_id && msg.topic_id.startsWith("gemini_")
+        ? msg.topic_id.slice(7)
+        : "ask");
+    const modeConfig = MODE_CONFIG[modeKey] || MODE_CONFIG.ask;
+    const modeBadge = document.createElement("span");
+    modeBadge.className = `mode-badge ${modeKey}`;
+    modeBadge.textContent = `${modeConfig.icon} ${modeConfig.name}`;
+    meta.appendChild(modeBadge);
+
+    const sourceBadge = document.createElement("span");
+    sourceBadge.className = "topic-badge";
+    if (msg.model_used) {
+      sourceBadge.textContent = `Google Gemini (${msg.model_used})`;
+      meta.appendChild(sourceBadge);
+    } else if (msg.topic_id && msg.topic_id.startsWith("gemini_")) {
+      sourceBadge.textContent = "Google Gemini";
+      meta.appendChild(sourceBadge);
+    } else if (msg.topic_id) {
+      sourceBadge.textContent = "Verified Knowledge Base";
+      meta.appendChild(sourceBadge);
+    } else if (!msg.is_supported) {
+      sourceBadge.style.borderColor = "var(--status-warning)";
+      sourceBadge.style.color = "var(--status-warning)";
+      sourceBadge.textContent = "Offline fallback / unavailable";
+      meta.appendChild(sourceBadge);
+    }
+
+    const time = document.createElement("span");
+    time.className = "message-time";
+    time.textContent = formatDate(msg.created_at);
+    meta.appendChild(time);
+    bubble.appendChild(meta);
 
     // Explanation formatted
     const textNode = renderFormattedContent(msg.content);
@@ -506,7 +510,7 @@ async function submitQuestion(questionText, overrideMode) {
 
   try {
     const csrfToken = await getCsrfToken();
-    const res = await fetch("/api/chat/ask", {
+    const data = await PyAssistErrors.fetchJson("/api/chat/ask", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -517,18 +521,8 @@ async function submitQuestion(questionText, overrideMode) {
         conversation_id: currentConversationId,
         mode: modeToUse
       })
-    });
-
-    const data = await res.json();
+    }, { fallback: "Something went wrong while processing your question." });
     loading.style.display = "none";
-
-    if (!res.ok) {
-      if (res.status === 401) {
-        window.location.href = "/login.html";
-        return;
-      }
-      throw new Error(data.detail || "Server error while processing question.");
-    }
 
     // Update conversation state
     currentConversationId = data.conversation_id;
@@ -546,9 +540,15 @@ async function submitQuestion(questionText, overrideMode) {
     loadConversations(); // refresh sidebar list
   } catch (err) {
     loading.style.display = "none";
+    if (err && err.status === 401) {
+      window.location.href = "/login.html";
+      return;
+    }
     const errorBanner = document.getElementById("chat-error-banner");
     const errorMsg = document.getElementById("chat-error-message");
-    errorMsg.textContent = err.message || "Unable to reach PyAssist. Please check your connection.";
+    errorMsg.textContent = PyAssistErrors.formatApiError(err, {
+      fallback: "Something went wrong while processing your question."
+    });
     errorBanner.style.display = "flex";
     scrollToBottom();
   } finally {
@@ -612,21 +612,19 @@ async function confirmDeleteConversation() {
 
   try {
     const csrfToken = await getCsrfToken();
-    const res = await fetch(`/api/history/${idToDelete}`, {
+    await PyAssistErrors.fetchJson(`/api/history/${idToDelete}`, {
       method: "DELETE",
       headers: {
         ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
       }
     });
 
-    if (res.ok) {
-      if (currentConversationId === idToDelete) {
-        startNewChat();
-      }
-      loadConversations();
+    if (currentConversationId === idToDelete) {
+      startNewChat();
     }
+    loadConversations();
   } catch (err) {
-    console.error("Delete failed:", err);
+    console.warn("Could not delete conversation.");
   }
 }
 
@@ -634,13 +632,11 @@ async function confirmDeleteConversation() {
 async function openTopicsModal() {
   const modal = document.getElementById("topics-modal");
   const listEl = document.getElementById("topics-modal-list");
-  listEl.innerHTML = "<div>Loading topics...</div>";
+  listEl.textContent = "Loading topics...";
   modal.classList.add("active");
 
   try {
-    const res = await fetch("/api/chat/topics");
-    if (!res.ok) throw new Error();
-    const topics = await res.json();
+    const topics = await PyAssistErrors.fetchJson("/api/chat/topics");
     listEl.innerHTML = "";
 
     topics.forEach(t => {
@@ -659,7 +655,7 @@ async function openTopicsModal() {
       listEl.appendChild(card);
     });
   } catch {
-    listEl.innerHTML = "<div>Failed to load topics.</div>";
+    listEl.textContent = "Failed to load topics. Please try again.";
   }
 }
 
@@ -682,7 +678,7 @@ function closeMobileSidebar() {
 async function handleLogout() {
   try {
     const csrfToken = await getCsrfToken();
-    await fetch("/api/auth/logout", {
+    await PyAssistErrors.fetchJson("/api/auth/logout", {
       method: "POST",
       headers: {
         ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
@@ -760,7 +756,17 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.querySelectorAll(".chip").forEach(chip => {
     chip.addEventListener("click", () => {
       const q = chip.getAttribute("data-question");
-      if (q) submitQuestion(q);
+      const mode = chip.getAttribute("data-mode") || "ask";
+      setMode(mode);
+      if (q) submitQuestion(q, mode);
+    });
+  });
+
+  // Assistant mode selectors
+  document.querySelectorAll(".mode-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      const mode = tab.getAttribute("data-mode");
+      if (mode) setMode(mode);
     });
   });
 

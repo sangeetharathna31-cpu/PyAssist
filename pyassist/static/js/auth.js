@@ -16,13 +16,10 @@ async function ensureCsrfToken() {
   let token = getCookie("pyassist_csrf");
   if (!token) {
     try {
-      const res = await fetch("/api/auth/csrf");
-      if (res.ok) {
-        const data = await res.json();
-        token = data.csrf_token;
-      }
+      const data = await PyAssistErrors.fetchJson("/api/auth/csrf");
+      token = data && data.csrf_token;
     } catch (e) {
-      console.warn("Could not fetch CSRF token:", e);
+      console.warn("Could not fetch CSRF token.");
     }
   }
   return token;
@@ -71,6 +68,12 @@ function setupRegisterForm() {
     const password = document.getElementById("password").value;
     const confirmPassword = document.getElementById("confirm-password").value;
 
+    if (!/^[a-zA-Z0-9_]{3,30}$/.test(username)) {
+      errorBanner.textContent = "Please enter a valid username (3–30 letters, numbers, or underscores).";
+      errorBanner.style.display = "block";
+      return;
+    }
+
     if (password !== confirmPassword) {
       errorBanner.textContent = "Passwords do not match.";
       errorBanner.style.display = "block";
@@ -88,24 +91,21 @@ function setupRegisterForm() {
 
     try {
       const csrfToken = await ensureCsrfToken();
-      const res = await fetch("/api/auth/register", {
+      await PyAssistErrors.fetchJson("/api/auth/register", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
         },
         body: JSON.stringify({ username, email, password })
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || "Registration failed. Please check your details.");
-      }
+      }, { fallback: "Registration failed. Please check your details." });
 
       // Success -> Redirect to chat
       window.location.href = "/";
     } catch (err) {
-      errorBanner.textContent = err.message;
+      errorBanner.textContent = PyAssistErrors.formatApiError(err, {
+        fallback: "Registration failed. Please check your details."
+      });
       errorBanner.style.display = "block";
     } finally {
       submitBtn.disabled = false;
@@ -135,24 +135,21 @@ function setupLoginForm() {
 
     try {
       const csrfToken = await ensureCsrfToken();
-      const res = await fetch("/api/auth/login", {
+      await PyAssistErrors.fetchJson("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(csrfToken ? { "X-CSRF-Token": csrfToken } : {})
         },
         body: JSON.stringify({ username_or_email, password })
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || "Invalid credentials.");
-      }
+      }, { fallback: "Invalid username/email or password." });
 
       // Success -> Redirect to chat
       window.location.href = "/";
     } catch (err) {
-      errorBanner.textContent = err.message;
+      errorBanner.textContent = PyAssistErrors.formatApiError(err, {
+        fallback: "Invalid username/email or password."
+      });
       errorBanner.style.display = "block";
     } finally {
       submitBtn.disabled = false;

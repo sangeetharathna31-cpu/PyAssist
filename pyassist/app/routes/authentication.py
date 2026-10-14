@@ -1,7 +1,8 @@
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 from pyassist.app.config import settings
 from pyassist.app.database import get_db
@@ -68,7 +69,10 @@ def register(
 
     # Check for existing username or email
     existing = db.query(User).filter(
-        or_(User.username == user_in.username, User.email == user_in.email)
+        or_(
+            func.lower(User.username) == user_in.username.lower(),
+            func.lower(User.email) == user_in.email.lower()
+        )
     ).first()
 
     if existing:
@@ -91,7 +95,14 @@ def register(
         password_hash=hashed_pw
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This username or email is already registered. Try logging in."
+        )
     db.refresh(user)
 
     # Automatically issue session
