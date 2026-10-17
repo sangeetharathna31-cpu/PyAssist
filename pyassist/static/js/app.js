@@ -14,31 +14,31 @@ const MODE_CONFIG = {
     name: "Ask Python",
     icon: "💡",
     placeholder: "Ask a Python question (e.g. What is the difference between is and ==?)...",
-    loadingText: "Gemini is analyzing your Python question..."
+    loadingText: "PyAssist is thinking…"
   },
   generate: {
     name: "Generate Code",
     icon: "⚡",
     placeholder: "Describe the Python code you need (e.g. Write an LRU Cache with O(1) ops)...",
-    loadingText: "Gemini is synthesizing clean Python code..."
+    loadingText: "PyAssist is working on your code…"
   },
   debug: {
     name: "Debug Code",
     icon: "🐞",
     placeholder: "Paste buggy code or error traceback (e.g. IndexError: list index out of range in line 4)...",
-    loadingText: "Gemini is diagnosing bug and traceback..."
+    loadingText: "PyAssist is tracing the issue…"
   },
   explain: {
     name: "Explain Code",
     icon: "📖",
     placeholder: "Paste Python code or algorithm to explain step-by-step with complexity analysis...",
-    loadingText: "Gemini is breaking down algorithm logic..."
+    loadingText: "PyAssist is explaining the code…"
   },
   review: {
     name: "Code Review",
     icon: "🔍",
     placeholder: "Paste Python code for review (PEP 8, performance, security, edge cases)...",
-    loadingText: "Gemini is performing senior code review..."
+    loadingText: "PyAssist is reviewing your code…"
   }
 };
 
@@ -79,85 +79,233 @@ function formatDate(dateStr) {
   }
 }
 
-// Sanitize & render formatted markdown-like text safely
+const PYTHON_KEYWORDS = new Set([
+  "and", "as", "assert", "async", "await", "break", "class", "continue",
+  "def", "del", "elif", "else", "except", "False", "finally", "for", "from",
+  "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or",
+  "pass", "raise", "return", "True", "try", "while", "with", "yield", "None"
+]);
+const PYTHON_BUILTINS = new Set([
+  "abs", "all", "any", "bool", "dict", "enumerate", "filter", "float", "int",
+  "len", "list", "map", "max", "min", "print", "range", "reversed", "round",
+  "set", "sorted", "str", "sum", "tuple", "type", "zip"
+]);
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function highlightCode(code, language) {
+  if (!["python", "py"].includes(String(language || "python").toLowerCase())) {
+    return escapeHtml(code);
+  }
+
+  const tokenPattern = /(#.*$|"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b\d+(?:\.\d+)?\b|\b[A-Za-z_]\w*\b)/gm;
+  let html = "";
+  let lastIndex = 0;
+
+  for (const match of code.matchAll(tokenPattern)) {
+    html += escapeHtml(code.slice(lastIndex, match.index));
+    const token = match[0];
+    let tokenClass = "";
+
+    if (token.startsWith("#")) {
+      tokenClass = "comment";
+    } else if (/^(?:["'])/.test(token)) {
+      tokenClass = "string";
+    } else if (/^\d/.test(token)) {
+      tokenClass = "number";
+    } else if (PYTHON_KEYWORDS.has(token)) {
+      tokenClass = "keyword";
+    } else if (PYTHON_BUILTINS.has(token)) {
+      tokenClass = "builtin";
+    }
+
+    html += tokenClass
+      ? `<span class="syntax-${tokenClass}">${escapeHtml(token)}</span>`
+      : escapeHtml(token);
+    lastIndex = match.index + token.length;
+  }
+
+  return html + escapeHtml(code.slice(lastIndex));
+}
+
+function createCodeBlock(code, language = "python") {
+  const codeBox = document.createElement("div");
+  codeBox.className = "code-container";
+
+  const codeHeader = document.createElement("div");
+  codeHeader.className = "code-header";
+
+  const languageLabel = document.createElement("span");
+  languageLabel.className = "code-header-left";
+  languageLabel.textContent = ["python", "py"].includes(String(language).toLowerCase())
+    ? "Python"
+    : (language || "Code");
+
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "btn-copy";
+  copyButton.textContent = "Copy code";
+  copyButton.setAttribute("aria-label", "Copy code");
+  copyButton.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      copyButton.textContent = "Copied";
+      window.setTimeout(() => { copyButton.textContent = "Copy code"; }, 1800);
+    } catch {
+      copyButton.textContent = "Copy unavailable";
+      window.setTimeout(() => { copyButton.textContent = "Copy code"; }, 1800);
+    }
+  };
+
+  codeHeader.append(languageLabel, copyButton);
+
+  const codePre = document.createElement("pre");
+  codePre.className = "code-content";
+  const codeElement = document.createElement("code");
+  codeElement.innerHTML = highlightCode(code, language);
+  codePre.appendChild(codeElement);
+
+  codeBox.append(codeHeader, codePre);
+  return codeBox;
+}
+
+// Render a small, safe subset of Markdown used by assistant responses.
 function renderFormattedContent(text) {
   const container = document.createElement("div");
   container.className = "message-text";
-
-  const lines = text.split("\n");
+  const lines = String(text || "").split("\n");
   let currentList = null;
+  let currentListType = "";
   let currentParagraph = [];
+  let inCodeBlock = false;
+  let codeLanguage = "python";
+  let codeLines = [];
+  let hasCodeBlocks = false;
 
   function flushParagraph() {
-    if (currentParagraph.length > 0) {
-      const p = document.createElement("p");
-      p.innerHTML = formatInlineMarkdown(currentParagraph.join(" "));
-      container.appendChild(p);
-      currentParagraph = [];
-    }
+    if (!currentParagraph.length) return;
+    const paragraph = document.createElement("p");
+    paragraph.innerHTML = formatInlineMarkdown(currentParagraph.join(" "));
+    container.appendChild(paragraph);
+    currentParagraph = [];
   }
 
   function flushList() {
-    if (currentList) {
-      container.appendChild(currentList);
-      currentList = null;
-    }
+    if (!currentList) return;
+    container.appendChild(currentList);
+    currentList = null;
+    currentListType = "";
   }
 
-  for (let line of lines) {
+  function appendListItem(type, textContent) {
+    flushParagraph();
+    if (currentList && currentListType !== type) flushList();
+    if (!currentList) {
+      currentList = document.createElement(type);
+      currentListType = type;
+    }
+    const item = document.createElement("li");
+    item.innerHTML = formatInlineMarkdown(textContent);
+    currentList.appendChild(item);
+  }
+
+  for (const line of lines) {
     const trimmed = line.trim();
+
+    if (inCodeBlock) {
+      if (trimmed.startsWith("```")) {
+        container.appendChild(createCodeBlock(codeLines.join("\n"), codeLanguage));
+        codeLines = [];
+        inCodeBlock = false;
+      } else {
+        codeLines.push(line);
+      }
+      continue;
+    }
+
+    const fence = trimmed.match(/^```([a-zA-Z0-9_+-]*)\s*$/);
+    if (fence) {
+      flushParagraph();
+      flushList();
+      inCodeBlock = true;
+      codeLanguage = fence[1] || "python";
+      hasCodeBlocks = true;
+      continue;
+    }
+
     if (!trimmed) {
       flushParagraph();
       flushList();
       continue;
     }
 
-    if (trimmed.startsWith("### ")) {
+    const heading = trimmed.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
       flushParagraph();
       flushList();
-      const h3 = document.createElement("h3");
-      h3.textContent = trimmed.substring(4);
-      container.appendChild(h3);
-    } else if (trimmed.startsWith("• ") || trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-      flushParagraph();
-      if (!currentList) {
-        currentList = document.createElement("ul");
-      }
-      const li = document.createElement("li");
-      li.innerHTML = formatInlineMarkdown(trimmed.substring(2));
-      currentList.appendChild(li);
-    } else if (/^\d+\.\s/.test(trimmed)) {
-      flushParagraph();
-      if (!currentList) {
-        currentList = document.createElement("ol");
-      }
-      const li = document.createElement("li");
-      li.innerHTML = formatInlineMarkdown(trimmed.replace(/^\d+\.\s/, ""));
-      currentList.appendChild(li);
-    } else {
-      flushList();
-      currentParagraph.push(trimmed);
+      const title = document.createElement(`h${heading[1].length}`);
+      title.textContent = heading[2];
+      container.appendChild(title);
+      continue;
     }
+
+    const bullet = trimmed.match(/^(?:[-*•])\s+(.+)$/);
+    if (bullet) {
+      appendListItem("ul", bullet[1]);
+      continue;
+    }
+
+    const numbered = trimmed.match(/^\d+[.)]\s+(.+)$/);
+    if (numbered) {
+      appendListItem("ol", numbered[1]);
+      continue;
+    }
+
+    flushList();
+    currentParagraph.push(trimmed);
   }
 
+  if (inCodeBlock) {
+    container.appendChild(createCodeBlock(codeLines.join("\n"), codeLanguage));
+  }
   flushParagraph();
   flushList();
-
+  container.dataset.hasCodeBlocks = String(hasCodeBlocks);
   return container;
 }
 
 function formatInlineMarkdown(text) {
-  // Safe inline escaping
-  let escaped = text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return String(text)
+    .split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g)
+    .map((part) => {
+      if (part.startsWith("`") && part.endsWith("`")) {
+        return `<code>${escapeHtml(part.slice(1, -1))}</code>`;
+      }
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return `<strong>${escapeHtml(part.slice(2, -2))}</strong>`;
+      }
+      if (part.startsWith("*") && part.endsWith("*")) {
+        return `<em>${escapeHtml(part.slice(1, -1))}</em>`;
+      }
+      return escapeHtml(part);
+    })
+    .join("");
+}
 
-  // Bold **word**
-  escaped = escaped.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-  // Inline code `code`
-  escaped = escaped.replace(/`([^`]+)`/g, "<code style='background: var(--bg-tertiary); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.9em; color: #a78bfa;'>$1</code>");
-  return escaped;
+function assistantDisplayText(message) {
+  const content = String(message.content || "");
+  if (
+    !message.is_supported &&
+    /^(?:Gemini is unavailable|This mode requires Gemini)/i.test(content.trim())
+  ) {
+    return "PyAssist couldn't complete that response. Please try again in a moment.";
+  }
+  return content;
 }
 
 // Check Authentication
@@ -291,12 +439,13 @@ function startNewChat() {
 // Render a single message in the feed
 function renderMessage(msg) {
   const feed = document.getElementById("messages-feed");
+  const isUser = msg.role === "user";
   const row = document.createElement("div");
-  row.className = `message-row ${msg.role === "user" ? "user" : "bot"}`;
+  row.className = `message-row ${isUser ? "user" : "bot"}`;
 
   const avatar = document.createElement("div");
-  avatar.className = `message-avatar ${msg.role === "user" ? "user" : "bot"}`;
-  avatar.textContent = msg.role === "user" ? ((currentUser && currentUser.username[0]) || "U").toUpperCase() : "🐍";
+  avatar.className = `message-avatar ${isUser ? "user" : "bot"}`;
+  avatar.textContent = isUser ? ((currentUser && currentUser.username[0]) || "U").toUpperCase() : "P";
 
   const contentCol = document.createElement("div");
   contentCol.className = "message-content";
@@ -304,107 +453,62 @@ function renderMessage(msg) {
   const bubble = document.createElement("div");
   bubble.className = "message-bubble";
 
-  if (msg.role === "user") {
-    bubble.textContent = msg.content;
-    const messageMode = msg.mode ||
-      (msg.topic_id && msg.topic_id.startsWith("mode:") ? msg.topic_id.slice(5) : "ask");
-    const modeConfig = MODE_CONFIG[messageMode];
-    if (modeConfig && messageMode !== "ask") {
-      const badge = document.createElement("div");
-      badge.className = `mode-badge ${messageMode}`;
-      badge.textContent = `${modeConfig.icon} ${modeConfig.name}`;
-      bubble.prepend(badge);
-    }
-  } else {
-    const meta = document.createElement("div");
-    meta.className = "message-meta";
+  const meta = document.createElement("div");
+  meta.className = `message-meta ${isUser ? "user-meta" : "assistant-meta"}`;
 
-    const modeKey = msg.mode ||
-      (msg.topic_id && msg.topic_id.startsWith("gemini_")
-        ? msg.topic_id.slice(7)
-        : "ask");
-    const modeConfig = MODE_CONFIG[modeKey] || MODE_CONFIG.ask;
+  const author = document.createElement("span");
+  author.className = isUser ? "message-author user-author" : "message-author assistant-author";
+  author.textContent = isUser ? "You" : "PyAssist";
+  meta.appendChild(author);
+
+  const modeKey = msg.mode ||
+    (msg.topic_id && msg.topic_id.startsWith("gemini_")
+      ? msg.topic_id.slice(7)
+      : (msg.topic_id && msg.topic_id.startsWith("mode:")
+        ? msg.topic_id.slice(5)
+        : "ask"));
+  const modeConfig = MODE_CONFIG[modeKey];
+  if (modeConfig && modeKey !== "ask") {
     const modeBadge = document.createElement("span");
     modeBadge.className = `mode-badge ${modeKey}`;
-    modeBadge.textContent = `${modeConfig.icon} ${modeConfig.name}`;
+    modeBadge.textContent = modeConfig.name;
     meta.appendChild(modeBadge);
+  }
 
-    const sourceBadge = document.createElement("span");
-    sourceBadge.className = "topic-badge";
-    if (msg.model_used) {
-      sourceBadge.textContent = `Google Gemini (${msg.model_used})`;
-      meta.appendChild(sourceBadge);
-    } else if (msg.topic_id && msg.topic_id.startsWith("gemini_")) {
-      sourceBadge.textContent = "Google Gemini";
-      meta.appendChild(sourceBadge);
-    } else if (msg.topic_id) {
-      sourceBadge.textContent = "Verified Knowledge Base";
-      meta.appendChild(sourceBadge);
-    } else if (!msg.is_supported) {
-      sourceBadge.style.borderColor = "var(--status-warning)";
-      sourceBadge.style.color = "var(--status-warning)";
-      sourceBadge.textContent = "Offline fallback / unavailable";
-      meta.appendChild(sourceBadge);
+  const time = document.createElement("span");
+  time.className = "message-time";
+  time.textContent = formatDate(msg.created_at);
+  meta.appendChild(time);
+  bubble.appendChild(meta);
+
+  if (isUser) {
+    const userText = document.createElement("div");
+    userText.className = "user-message-text";
+    userText.textContent = msg.content;
+    bubble.appendChild(userText);
+  } else {
+    const displayText = assistantDisplayText(msg);
+    const formattedContent = renderFormattedContent(displayText);
+    bubble.appendChild(formattedContent);
+
+    // Use the structured code field only when the answer has no fenced code block.
+    if (msg.code_example && formattedContent.dataset.hasCodeBlocks !== "true") {
+      bubble.appendChild(createCodeBlock(msg.code_example, "python"));
     }
 
-    const time = document.createElement("span");
-    time.className = "message-time";
-    time.textContent = formatDate(msg.created_at);
-    meta.appendChild(time);
-    bubble.appendChild(meta);
-
-    // Explanation formatted
-    const textNode = renderFormattedContent(msg.content);
-    bubble.appendChild(textNode);
-
-    // Code block if present
-    if (msg.code_example) {
-      const codeBox = document.createElement("div");
-      codeBox.className = "code-container";
-
-      const codeHeader = document.createElement("div");
-      codeHeader.className = "code-header";
-
-      const left = document.createElement("div");
-      left.className = "code-header-left";
-      left.innerHTML = `<span class="code-header-dots"><span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span></span> Python`;
-
-      const copyBtn = document.createElement("button");
-      copyBtn.className = "btn-copy";
-      copyBtn.innerHTML = `<span>📋</span> Copy Code`;
-      copyBtn.onclick = () => {
-        navigator.clipboard.writeText(msg.code_example);
-        copyBtn.innerHTML = `<span>✓</span> Copied!`;
-        setTimeout(() => { copyBtn.innerHTML = `<span>📋</span> Copy Code`; }, 2000);
-      };
-
-      codeHeader.appendChild(left);
-      codeHeader.appendChild(copyBtn);
-
-      const codePre = document.createElement("pre");
-      codePre.className = "code-content";
-      codePre.textContent = msg.code_example;
-
-      codeBox.appendChild(codeHeader);
-      codeBox.appendChild(codePre);
-      bubble.appendChild(codeBox);
-    }
-
-    // Expected output block if present
     if (msg.expected_output) {
       const outBox = document.createElement("div");
       outBox.className = "output-container";
 
       const outHeader = document.createElement("div");
       outHeader.className = "output-header";
-      outHeader.innerHTML = `<span>▶</span> Expected Output`;
+      outHeader.textContent = "Expected output";
 
       const outPre = document.createElement("pre");
       outPre.className = "output-content";
       outPre.textContent = msg.expected_output;
 
-      outBox.appendChild(outHeader);
-      outBox.appendChild(outPre);
+      outBox.append(outHeader, outPre);
       bubble.appendChild(outBox);
     }
   }
@@ -412,18 +516,24 @@ function renderMessage(msg) {
   contentCol.appendChild(bubble);
 
   // Bot actions
-  if (msg.role === "assistant") {
+  if (!isUser) {
     const actions = document.createElement("div");
     actions.className = "message-actions";
 
     const copyAnsBtn = document.createElement("button");
     copyAnsBtn.className = "action-btn";
-    copyAnsBtn.innerHTML = `<span>📋</span> Copy Answer`;
-    copyAnsBtn.onclick = () => {
-      const fullText = `${msg.content}\n\n${msg.code_example ? '```python\n' + msg.code_example + '\n```\n' : ''}${msg.expected_output ? 'Output:\n' + msg.expected_output : ''}`;
-      navigator.clipboard.writeText(fullText);
-      copyAnsBtn.innerHTML = `<span>✓</span> Copied!`;
-      setTimeout(() => { copyAnsBtn.innerHTML = `<span>📋</span> Copy Answer`; }, 2000);
+    copyAnsBtn.type = "button";
+    copyAnsBtn.textContent = "Copy response";
+    copyAnsBtn.onclick = async () => {
+      const fullText = `${assistantDisplayText(msg)}\n\n${msg.code_example ? '```python\n' + msg.code_example + '\n```\n' : ''}${msg.expected_output ? 'Output:\n' + msg.expected_output : ''}`;
+      try {
+        await navigator.clipboard.writeText(fullText);
+        copyAnsBtn.textContent = "Copied";
+        window.setTimeout(() => { copyAnsBtn.textContent = "Copy response"; }, 1800);
+      } catch {
+        copyAnsBtn.textContent = "Copy unavailable";
+        window.setTimeout(() => { copyAnsBtn.textContent = "Copy response"; }, 1800);
+      }
     };
 
     actions.appendChild(copyAnsBtn);

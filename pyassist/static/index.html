@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PyAssist — Personal Python Question-Answering Chatbot</title>
+  <title>PyAssist — Python Assistant</title>
   <link rel="icon" href="data:,">
   <meta name="description" content="Personal Python Question-Answering Chatbot with beginner-friendly explanations, code examples, session history, and full authentication.">
   <link rel="stylesheet" href="/css/style.css">
@@ -89,10 +89,6 @@
         </div>
         <div style="display: flex; align-items: center; gap: 12px;">
           <button id="btn-open-topics" class="btn-topics-modal">📚 Browse Topics</button>
-          <div class="header-status" id="header-status">
-            <span class="status-dot"></span>
-            <span id="ai-status-indicator">Response source shown with each answer</span>
-          </div>
         </div>
       </header>
 
@@ -101,12 +97,11 @@
         <div class="messages-wrapper">
           <!-- Welcome Screen (shown when conversation has no messages) -->
           <div id="welcome-screen" class="welcome-card">
-            <div class="welcome-icon">⚡🐍</div>
-            <h1 class="welcome-title">PyAssist — Gemini Python Assistant</h1>
+            <div class="welcome-icon">P</div>
+            <h1 class="welcome-title">PyAssist</h1>
             <p class="welcome-subtitle">
-              Your professional Python coding & debugging mentor powered by Google Gemini.
-              Reason about programming problems, synthesize idiomatic code, diagnose tracebacks,
-              break down algorithms, and conduct thorough code reviews.
+              Ask a Python question, share a traceback, or bring code to explain or review.
+              Your conversations stay saved so you can pick up where you left off.
             </p>
 
             <div class="chips-section-title">Select a mode or try a quick prompt:</div>
@@ -127,14 +122,14 @@
 
           <!-- Active Loading State -->
           <div id="loading-indicator" class="loading-row" style="display: none;">
-            <div class="message-avatar bot">✨</div>
+            <div class="message-avatar bot">P</div>
             <div class="loading-bubble">
               <div class="typing-dots">
                 <span class="typing-dot"></span>
                 <span class="typing-dot"></span>
                 <span class="typing-dot"></span>
               </div>
-              <span id="loading-text" class="loading-text">Gemini is reasoning and writing Python code...</span>
+              <span id="loading-text" class="loading-text">PyAssist is thinking…</span>
             </div>
           </div>
 
@@ -185,16 +180,17 @@
             <div class="input-actions">
               <span id="char-counter" class="char-counter">0/4000</span>
               <button type="submit" id="btn-send" class="btn-send" disabled aria-label="Send message">
-                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
                   <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                 </svg>
+                <span>Send</span>
               </button>
             </div>
           </div>
           <div class="input-hint">
             <span>Press <strong>Enter ↵</strong> to send, <strong>Shift + Enter</strong> for a new line</span>
-            <span>Deterministic Knowledge Base • No external LLM keys required</span>
+            <span>Review generated code before running it.</span>
           </div>
         </form>
       </footer>
