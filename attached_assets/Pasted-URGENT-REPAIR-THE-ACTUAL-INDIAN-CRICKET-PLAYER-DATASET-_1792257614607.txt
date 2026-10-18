@@ -1,0 +1,46 @@
+URGENT: REPAIR THE ACTUAL INDIAN CRICKET PLAYER DATASET IN MY EXISTING INDRA CV PROJECT. My submission is today.
+
+The current dataset is incorrect and incomplete. MS Dhoni is mapped to a girl's photo, KL Rahul is mapped to an unrelated boy, other images may also be wrong, and player details are missing. Do not just redesign the UI or create mock data.
+
+1. Audit and repair the actual dataset
+
+Inspect the real dataset files, CSV/JSON records, database, image folders, image paths, player IDs, and recognition reference templates.
+
+- Find every incorrect or mismatched player-to-image mapping.
+- Replace incorrect mappings only with authentic, correctly identified player photographs from reliable sources where available.
+- Never assign random images or assume a filename proves identity.
+- If an image cannot be verified, mark it as missing/unverified and exclude it from recognition enrollment.
+- Back up existing data before making changes.
+- Ensure every player ID, name, photograph, metadata record, and recognition template refers to the same person.
+
+2. Create complete structured player records
+
+For each verified Indian men's cricket player, include the available fields:
+
+- Full name
+- Playing role: batter, wicketkeeper-batter, all-rounder, or bowler
+- Batting style
+- Bowling style and type, including pace or spin where verified
+- Jersey number where verified
+- Team and current squad status
+- Career statistics with source and as-of date, when reliably available
+- Correct photograph and its source
+- Recognition enrollment status
+
+Use reliable cricket sources, such as BCCI and official tournament/team profiles. Distinguish the current squad from historical Indian international players. Do not invent missing details or claim the list is complete without verification.
+
+3. Make all player roles searchable
+
+Update the existing Squad page to show properly structured player profiles with search and filters for batter, wicketkeeper, all-rounder, fast/pace bowler, and spin bowler. A player may have more than one relevant role.
+
+4. Repair face recognition data
+
+Only use genuine, correctly mapped reference photographs. Rebuild the relevant SFace embeddings using the existing pipeline after verifying each image. Players without valid reference images must display “Not Enrolled” and must not be falsely recognized.
+
+5. Preserve the project and verify the result
+
+Do not rebuild the entire app, break login, delete valid data, fabricate statistics, use placeholder identities, or replace real recognition with mock responses.
+
+Run available dataset validation, recognition tests, and the production build. Report the exact dataset files changed, verified player count, missing/unverified records, corrected image mappings, sources used, actual test results, and remaining limitations.
+
+Start by inspecting and fixing the real dataset. Do not return only a plan or a visually polished demo.
